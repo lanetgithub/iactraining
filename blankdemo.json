@@ -1,0 +1,46 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "Prefix": {
+           "type": "string",
+           "metadata": {
+                "description": "Prefix for resource name"
+            }
+        },
+        "regioncode": {
+           "type": "string",
+           "metadata": {
+                "description": "region code"
+            }
+        }
+    },
+    "functions": [],
+    "variables": {
+        "DailyQuotaGB" : 10,
+        "DailyRetention": 45,
+        "suffix" : "[substring(uniqueString(resourceGroup().id,resourceGroup().location), 0, 5)]",
+        "LogAnalyticsName": "[concat(parameters('Prefix'),'-',parameters('regioncode'),'-',variables('suffix'))]"
+    },
+    "resources": [
+        {
+            "name": "[variables('LogAnalyticsName')]",
+            "type": "Microsoft.OperationalInsights/workspaces",
+            "apiVersion": "2020-08-01",
+            "location": "[resourceGroup().location]",
+            "properties": {
+                "sku": {
+                    "name": "pergb2018"
+                },
+                "retentionInDays": "[variables('DailyRetention')]",
+                "workspaceCapping": {
+                    "dailyQuotaGb": "[variables('DailyQuotaGB')]"
+                },
+                "features": {
+                    "searchVersion": 1
+                }
+            }
+        }
+    ],
+    "outputs": {}
+}
