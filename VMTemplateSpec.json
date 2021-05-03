@@ -1,0 +1,163 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "vmNamePrefix": {
+            "type": "string",
+            "defaultValue": "VM",
+            "metadata": {
+                "description": "Assing a prefix for the VM you will create."
+            }
+        },
+        "Environment": {
+            "type": "string",
+            "allowedValues": [
+                "Production",
+                "Development"
+            ],
+            "metadata": {
+                "description": "Select whether the VM should be in production or Development."
+            }
+        },
+        "platform": {
+            "type": "string",
+            "allowedValues": [
+                "Windows",
+                "Linux"
+            ],
+            "metadata": {
+                "description": "Select the OS type to deploy."
+            }
+        },
+        "VMSize": {
+           "type": "string",
+           "allowedValues": [
+                "Small",
+                "Large"
+            ],
+           "metadata": {
+                "description": "Select VM Size"
+            }
+        },
+        "userName": {
+            "type": "string",
+            "defaultValue": "azureadmin",
+            "metadata": {
+                "description": "Specify the OS username"
+            }
+        },
+        "pwdOrSsh": {
+            "type": "securestring",
+            "metadata": {
+                "description": "If Windows, specify the password for the OS username. If Linux, provide the SSH."
+            }
+        }
+    },
+    "variables": {
+        "smallVMSize" : "Standard_B1s",
+        "LargeVMSize" : "Standard_DS2_v3",
+        "SubscriptionSelected": "[subscription().subscriptionId]",
+        "VnetSubscriptionId": "ProdSubscriptionIDHERE",
+        "VnetResourceGroupName": "RG-UKS-SANDBOX",
+        "VnetName": "VNET-PRD-UKS-INFRA",
+        "SubnetName": "VM",
+        "subnetRef": "[concat('/subscriptions/',variables('VnetSubscriptionId'),'/resourceGroups/',variables('VnetResourceGroupName'),'/providers/Microsoft.Network/virtualNetworks/',variables('VnetName'),'/subnets/',variables('SubnetName'))]",        
+        
+        "DevVnetSubscriptionId": "DevSubscriptionIDHERE",
+        "DevVnetResourceGroupName": "RG-DEV-UKS-INFRA",
+        "DevVnetName": "VNET-DEV-UKS-INFRA",
+        "DevSubnetName": "VM",
+        "DevsubnetRef": "[concat('/subscriptions/',variables('SubscriptionSelected'),'/resourceGroups/',variables('DevVnetResourceGroupName'),'/providers/Microsoft.Network/virtualNetworks/',variables('DevVnetName'),'/subnets/',variables('DevSubnetName'))]",        
+                
+        "windowsOffer": "WindowsServer",
+        "windowsSku": "2016-Datacenter",
+        "windowsPublisher": "MicrosoftWindowsServer",
+        "linuxOffer": "UbuntuServer",
+        "linuxSku": "12.04.5-LTS",
+        "linuxPublisher": "Canonical",
+        "vmName": "[concat(parameters('vmNamePrefix'))]",
+        "NicName": "[concat('NIC-',parameters('vmNamePrefix'))]"
+    },
+    "resources": [
+       {
+            "type": "Microsoft.Network/networkInterfaces",
+            "apiVersion": "2020-08-01",
+            "name": "[variables('NicName')]",
+            "location": "[resourceGroup().location]",
+            "properties": {
+                "ipConfigurations": [
+                    {
+                        "name": "ipconfig1",
+                        "properties": {
+                            "privateIPAllocationMethod": "Dynamic",
+                            "subnet": {
+                                "id": "[if(equals(parameters('Environment'), 'Production'), variables('subnetRef'), variables('DevsubnetRef'))]"
+                                }
+                        }
+                    }
+                ]
+            }
+        },
+        {
+            "type": "Microsoft.Compute/virtualMachines",
+            "apiVersion": "2020-12-01",
+            "name": "[variables('vmName')]",
+            "location": "[resourceGroup().location]",
+            "dependsOn": [
+                "[resourceId('Microsoft.Network/networkinterfaces/', variables('NicName'))]"
+            ],
+            "properties": {
+                "hardwareprofile": {
+                    "vmsize" : "[if(equals(parameters('VMSize'), 'Small'), variables('smallVMSize'), variables('LargeVMSize'))]"
+                },
+                "osProfile": {
+                    "computername": "[parameters('vmNamePrefix')]",
+                    "adminusername": "[parameters('username')]",
+                    "adminpassword": "[parameters('pwdOrssh')]"
+                },
+                "storageProfile": {
+                    "osdisk": {
+                        "name": "[concat(parameters('vmNamePrefix'), '-osDisk')]",
+                        "createOption": "FromImage",
+                        "managedDisk": {
+                            "storageAccountType": "Standard_LRS"
+                        },
+                        "caching": "ReadWrite"
+                    },
+                    "imageReference": {
+                        "publisher": "[if(equals(parameters('platform'), 'Windows'), variables('windowsPublisher'), variables('linuxPublisher'))]",
+                        "offer": "[if(equals(parameters('platform'), 'Windows'), variables('windowsOffer'), variables('linuxOffer'))]",
+                        "version": "latest",
+                        "sku": "[if(equals(parameters('platform'), 'Windows'), variables('windowsSku'), variables('linuxSku'))]"
+                    }
+                },
+                "networkprofile": {
+                    "networkinterfaces": [
+                        {
+                            "id": "[resourceId('Microsoft.Network/networkinterfaces', variables('NicName'))]"
+                        }
+                    ]
+                },
+                "diagnosticsProfile": {
+                    "bootDiagnostics": {
+                        "enabled": true
+                    }
+                }
+            }
+        }
+    ],
+    "outputs": {
+        "platform": {
+            "type": "string",
+            "value": "[parameters('platform')]"
+        },
+        "Environment": {
+                        "type": "string",
+            "value": "[parameters('Environment')]"
+        },
+        "connectionInfo": {
+            "type": "string",
+            "value": "[if(equals(parameters('platform'), 'Windows'), 'Use RDP to connect to the VM', 'Use SSH to connect to the VM')]"
+        }
+    }
+}
